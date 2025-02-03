@@ -1,7 +1,6 @@
 const express = require('express');
 require('dotenv').config();
 const mysql = require('mysql2');
-const bcrypt = require("bcrypt");
 
 
 // Next initialize the application
