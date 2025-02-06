@@ -42,53 +42,74 @@ app.listen(3000, () => {
 
 // POST: Create a new motel and generate rooms
 app.post('/motels', async (req, res) => {
-    const { Name, Location, Rooms } = req.body;
+    const { Name, Location, roomSets, max_rooms } = req.body;
+    //console.log(Name, Location, roomSets, max_rooms);
   
     // Validate the form data
-    if (!Name || !Location || !Rooms || !Array.isArray(Rooms) || Rooms.length === 0) {
+    if (!Name || !Location || !roomSets || !Array.isArray(roomSets) || roomSets.length === 0) {
       return res.status(400).json({ error: 'Invalid input. Name, Location, and Rooms are required.' });
     }
+  
+   // if (max_rooms && max_rooms > 30) {
+    //  return res.status(400).json({ error: 'You cannot create more than 30 rooms' });
+   // }
+  
+    // Calculate total number of rooms from all roomSets
+    //const totalRooms = roomSets.reduce((total, roomSet) => total + parseInt(roomSet.numRooms), 0);
+  
+    //if (totalRooms > (max_rooms || 30)) {
+    //  return res.status(400).json({ error: 'You cannot create more than 30 rooms' });
+    //}
   
     // Start a transaction
     const connection = await db.promise().getConnection();
     try {
       await connection.beginTransaction();
   
-      // Step 1: Insert the motel
+      // Step 1: Insert the motel into the motel_details table
       const [motelResult] = await connection.query(
-        'INSERT INTO Motel (Name, Location) VALUES (?, ?)',
-        [Name, Location]
+        'INSERT INTO motel_details (motel_name, motel_location,motel_max_rooms) VALUES (?, ?,?)',
+        [Name, Location,max_rooms]
       );
       const MotelID = motelResult.insertId;
   
-      // Step 2: Generate rooms based on the provided room data
-      for (const room of Rooms) {
-        const { RoomTypeID, NumberOfRooms, StartNumber, EndNumber } = room;
+      // Step 2: Process each room set and insert rooms into the room table
+      for (const room of roomSets) {
+        const { roomType, numRooms, startNumber } = room;
   
-        if (!RoomTypeID || !NumberOfRooms || !StartNumber || !EndNumber || StartNumber > EndNumber) {
+        if (!roomType || !numRooms || !startNumber) {
           throw new Error('Invalid room data provided.');
         }
   
-        // Check if the number of rooms matches the range
-        const rangeCount = EndNumber - StartNumber + 1;
-        if (NumberOfRooms !== rangeCount) {
-          throw new Error(
-            `Mismatch between NumberOfRooms (${NumberOfRooms}) and the range (${rangeCount}) for room type ${RoomTypeID}.`
-          );
+        // Get the room_type_id from the room_type table based on the roomType
+        const [roomTypeResult] = await connection.query(
+          'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
+          [roomType]
+        );
+  
+        if (roomTypeResult.length === 0) {
+          throw new Error(`Room type "${roomType}" not found.`);
         }
   
-        // Insert rooms into the Room table
-        for (let i = StartNumber; i <= EndNumber; i++) {
+        const roomTypeID = roomTypeResult[0].roomtype_id;
+  
+        // Determine the number of rooms based on the number of rooms provided and the range of numbers
+        const startRoomNumber = parseInt(startNumber); // Assuming startNumber is like "101"
+        const roomSuffix = startNumber.slice(-2); // Get "-A" or "-B" suffix
+  
+        // Insert rooms in a loop
+        for (let i = 0; i < numRooms; i++) {
+          const roomNumber = `${startRoomNumber + i}${roomSuffix}`;
+  
           await connection.query(
-            'INSERT INTO Room (MotelID, RoomTypeID, RoomNumber, Status) VALUES (?, ?, ?, ?)',
-            [MotelID, RoomTypeID, i, 'Available']
+            'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
+            [MotelID, roomTypeID, roomNumber]
           );
         }
       }
   
       // Commit the transaction
       await connection.commit();
-  
       res.json({ message: 'Motel and rooms created successfully', MotelID });
     } catch (err) {
       // Roll back in case of an error
@@ -99,11 +120,183 @@ app.post('/motels', async (req, res) => {
       connection.release();
     }
   });
-
+  
+  app.delete("/motels/:id", async (req, res) => {
+    const { id } = req.params;
+  
+    if (!id) {
+      return res.status(400).json({ error: "Motel ID is required." });
+    }
+  
+    const connection = await db.promise().getConnection();
+    try {
+      await connection.beginTransaction();
+  
+      // Check if the motel exists
+      const [motel] = await connection.query("SELECT * FROM motel_details WHERE motel_id = ?", [id]);
+      if (motel.length === 0) {
+        throw new Error("Motel not found.");
+      }
+  
+      // Delete associated rooms
+      await connection.query("DELETE FROM room WHERE motel_id = ?", [id]);
+  
+      // Delete the motel
+      await connection.query("DELETE FROM motel_details WHERE motel_id = ?", [id]);
+  
+      await connection.commit();
+      res.json({ message: "Motel and associated rooms deleted successfully." });
+  
+    } catch (error) {
+      await connection.rollback();
+      console.error("Error deleting motel:", error.message);
+      res.status(500).json({ error: "Failed to delete motel.", details: error.message });
+    } finally {
+      connection.release();
+    }
+  });
 
    // 🔹 Get All Motel Names
-   app.get("/motels", (req, res) => {
-    db.query("SELECT motel_id,motel_name,motel_location FROM motel_details", (err, results) => {
+//    app.get("/motels", (req, res) => {
+//     db.query("SELECT motel_id,motel_name,motel_location FROM motel_details", (err, results) => {
+//       if (err) return res.status(500).send(err);
+//       res.json(results);
+//     });
+//   });
+app.get("/rooms", (req, res) => {
+    const { motel_id } = req.query;
+  
+    if (!motel_id) {
+      return res.status(400).json({ error: "Motel ID is required" });
+    }
+  
+    const query = `
+      SELECT r.room_id, r.motel_id, rt.roomtypename , r.roomnumber
+      FROM room r
+      JOIN room_type rt ON r.roomtype_id = rt.roomtype_id
+      WHERE r.motel_id = ?
+    `;
+  
+    db.query(query, [motel_id], (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "Database query failed" });
+      }
+      res.json(results);
+    });
+  });
+
+  app.get("/motels", (req, res) => {
+    // Query to get motels along with room details grouped by room type
+    const query = `
+      SELECT 
+        m.motel_id, 
+        m.motel_name, 
+        m.motel_location, 
+        m.motel_max_rooms, 
+        rt.roomtypename, 
+        COUNT(r.room_id) AS room_count, 
+        MIN(r.roomnumber) AS start_room_number
+      FROM motel_details m
+      LEFT JOIN room r ON m.motel_id = r.motel_id
+      LEFT JOIN room_type rt ON r.roomtype_id = rt.roomtype_id
+      GROUP BY m.motel_id, rt.roomtypename
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) return res.status(500).send(err);
+
+        // Group the results by motel_id
+        const motels = results.reduce((acc, row) => {
+            const motel = acc.find(motel => motel.motel_id === row.motel_id);
+            if (motel) {
+                motel.room_types.push({
+                    roomtypename: row.roomtypename,
+                    room_count: row.room_count,
+                    start_room_number: row.start_room_number
+                });
+            } else {
+                acc.push({
+                    motel_id: row.motel_id,
+                    motel_name: row.motel_name,
+                    motel_location: row.motel_location,
+                    motel_max_rooms: row.motel_max_rooms,
+                    room_types: [{
+                        roomtypename: row.roomtypename,
+                        room_count: row.room_count,
+                        start_room_number: row.start_room_number
+                    }]
+                });
+            }
+            return acc;
+        }, []);
+
+        res.json(motels);
+    });
+});
+
+
+//Edit Motel 
+app.put("/motels/:id", async (req, res) => {
+    const { id } = req.params;
+    const { roomSets } = req.body;
+  
+    //console.log(id,roomSets)
+    if (!roomSets || !Array.isArray(roomSets)) {
+      return res.status(400).json({ error: "Invalid room data." });
+    }
+  
+    const connection = await db.promise().getConnection();
+    try {
+      await connection.beginTransaction();
+  
+      // Get existing motel details
+      const [motel] = await connection.query("SELECT * FROM motel_details WHERE motel_id = ?", [id]);
+      if (motel.length === 0) {
+        throw new Error("Motel not found.");
+      }
+      const maxRooms = motel[0].motel_max_rooms;
+      //console.log(maxRooms)
+
+      const totalRooms = roomSets.reduce((sum, room) => sum + parseInt(room.room_count || 0), 0);
+      if (totalRooms > maxRooms) {
+        throw new Error(`Total rooms cannot exceed ${maxRooms}.`);
+      }
+  
+      // Delete existing rooms for the motel
+      await connection.query("DELETE FROM room WHERE motel_id = ?", [id]);
+  
+      // Insert updated rooms
+      for (const room of roomSets) {
+        const [roomType] = await connection.query("SELECT roomtype_id FROM room_type WHERE roomtypename = ?", [room.roomtypename]);
+        //console.log(roomType)
+        if (roomType.length === 0) {
+          throw new Error(`Invalid room type: ${room.roomType}`);
+        }
+  
+        const startNumber = parseInt(room.start_room_number.split("-")[0]); // Extract number part from "101-A"
+        for (let i = 0; i < room.room_count; i++) {
+          const roomNumber = `${startNumber + i}-${room.start_room_number.split("-")[1]}`; // Maintain -A or -B
+          await connection.query(
+            "INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)",
+            [id, roomType[0].roomtype_id, roomNumber]
+          );
+        }
+      }
+  
+      await connection.commit();
+      res.json({ message: "Motel rooms updated successfully." });
+  
+    } catch (error) {
+      await connection.rollback();
+      res.status(500).json({ error: error.message });
+    } finally {
+      connection.release();
+    }
+  });  
+
+///Get Room Types 
+  app.get("/roomtypes", (req, res) => {
+    db.query("SELECT roomtypename FROM room_type", (err, results) => {
       if (err) return res.status(500).send(err);
       res.json(results);
     });
@@ -278,3 +471,91 @@ app.delete("/users/:id", (req, res) => {
       res.json({ message: "User deleted successfully" });
     });
   });
+
+  app.post("/check-user", (req, res) => {
+    const { username } = req.body;
+  
+    if (!username) {
+      return res.status(400).json({ success: false, message: "Username is required" });
+    }
+  
+    const query = "SELECT COUNT(*) AS count FROM user WHERE username = ?";
+    db.query(query, [username], (err, results) => {
+      if (err) {
+        console.error("Database query error:", err);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+      }
+  
+      const userExists = results[0].count > 0;
+      res.json({ success: true, exists: userExists });
+    });
+  });
+
+  //Check user_history 
+  app.post("/check-user-history", (req, res) => {
+    const { username } = req.body;
+  
+    if (!username) {
+      return res.status(400).json({ message: "Username is required" });
+    }
+  
+    const query = `
+      SELECT EXISTS (
+        SELECT 1 FROM user_history WHERE user_id = (SELECT user_id FROM user WHERE username = ?)
+      ) AS userExists;
+    `;
+  
+    db.query(query, [username], (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Internal Server Error" });
+      }
+  
+      const isFirstLogin = results[0].userExists === 0;
+      return res.json({ isFirstLogin });
+    });
+  });
+  
+// Reset Password Route
+app.post("/reset-password", async (req, res) => {
+    const { username, newPassword } = req.body;
+  
+    // Validate input
+    if (!username || !newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: "Invalid input" });
+    }
+  
+    // Check if the user exists in the database
+    db.execute("SELECT * FROM user WHERE username = ?", [username], async (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "An error occurred while accessing the database." });
+      }
+  
+      if (results.length === 0) {
+        return res.status(404).json({ message: "User not found." });
+      }
+      //console.log(results[0].user_id)
+      // Hash the new password
+      try {
+        const hashedPassword = newPassword;
+  
+        // Update password in the database
+        db.execute("UPDATE user SET password = ? WHERE username = ?", [hashedPassword, username], (updateErr, updateResults) => {
+          if (updateErr) {
+            console.error("Update error:", updateErr);
+            return res.status(500).json({ message: "An error occurred while updating the password." });
+          }
+          db.query(
+            "INSERT INTO user_history (user_id, action) VALUES (?, 'Password Updated')",
+            [results[0].user_id]
+          );
+          return res.status(200).json({ message: "Password updated successfully." });
+        });
+      } catch (error) {
+        console.error("Hashing error:", error);
+        return res.status(500).json({ message: "An error occurred while hashing the password." });
+      }
+    });
+  });
+  
