@@ -163,6 +163,66 @@ app.post('/motels', async (req, res) => {
 //       res.json(results);
 //     });
 //   });
+app.get("/avl_rooms", async (req, res) => {
+    try {
+        const { motel_id, roomtypename } = req.query;
+        const connection = await db.promise().getConnection();
+        //console.log(motel_id, roomtypename)
+
+        if (!motel_id) {
+            return res.status(400).json({ error: "motel_id is required" });
+        }
+
+        // Fetch motel details
+        const motelQuery = "SELECT * FROM motel_details WHERE motel_name = ?";
+        const [motel] = await connection.query(motelQuery, [motel_id]);
+
+        if (!motel) {
+            return res.status(404).json({ error: "Motel not found" });
+        }
+       // console.log(motel)
+
+        // Fetch roomtype_id using roomtypename
+        let roomTypeCondition = "";
+        let roomtypeid = "";
+
+        if (roomtypename && roomtypename !== "All") {
+            const roomTypeQuery = "SELECT roomtype_id FROM room_type WHERE roomtypename = ?";
+            const [roomType] = await connection.query(roomTypeQuery, [roomtypename]);
+            console.log(roomType[0].roomtype_id)
+
+            if (!roomType) {
+                return res.status(404).json({ error: "Room type not found" });
+            }
+
+            //roomTypeCondition = "AND roomtype_id = ?";
+            roomtypeid = roomType[0].roomtype_id
+            //roomTypeParams.push(roomType[0].roomtype_id);
+        }
+        //console.log(roomTypeParams)
+        // Fetch available rooms for the motel, filtering by roomtypename if provided
+        const current_booking_status = "available"
+        const roomsQuery = `
+            SELECT r.*, rt.roomtypename 
+            FROM room r  
+            INNER JOIN room_type rt ON r.roomtype_id = rt.roomtype_id  
+            WHERE r.motel_id = ? AND r.roomtype_id = ? AND r.current_booking_status = ?;
+        `;
+        //console.log(motel[0].motel_id)
+        const [rooms] = await connection.query(roomsQuery, [motel[0].motel_id, roomtypeid,current_booking_status]);
+        //console.log(rooms)
+        res.json({
+            motel,
+            available_rooms: rooms,
+        });
+        //console.log(res) 
+    } catch (error) {
+        console.error("Error fetching motel details and rooms:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+
 app.get("/rooms", (req, res) => {
     const { motel_id } = req.query;
   
@@ -436,7 +496,7 @@ app.post("/users", async (req, res) => {
     res.json({ message: "Logout recorded" });
   });
   
-  // 🔹 Get All Users
+  // Get All Users
   app.get("/users", (req, res) => {
     db.query("SELECT * FROM user", (err, results) => {
       if (err) return res.status(500).send(err);
@@ -444,7 +504,7 @@ app.post("/users", async (req, res) => {
     });
   });
   
-  // 🔹 Get User History
+  // Get User History
   app.get("/users/:id/history", (req, res) => {
     db.query(
       "SELECT * FROM UserHistory WHERE user_id = ?",
@@ -559,3 +619,70 @@ app.post("/reset-password", async (req, res) => {
     });
   });
   
+  //book a room
+  app.post('/bookaroom', async (req, res) => {
+    try {
+        const { motel_name, customer_details, room_type, check_in, nights, rooms, adults, check_out } = req.body;
+        
+        // Get motel_id
+        const [motelRows] = await db.execute('SELECT motel_id FROM motel_details WHERE motel_name = ?', [motel_name]);
+        if (motelRows.length === 0) return res.status(400).json({ error: 'Motel not found' });
+        const motel_id = motelRows[0].motel_id;
+        
+        // Extract only the available fields from customer_details
+        const fields = Object.keys(customer_details);
+        const values = Object.values(customer_details);
+        // Handle image file if it's included
+        if (customer_details.customer_image) {
+            fields.push('customer_image');
+            values.push(customer_details.customer_image); // This is a Buffer (BLOB)
+        }
+        //SQL query dynamically
+        const placeholders = fields.map(() => '?').join(', ');
+        const sql = `INSERT INTO customer (${fields.join(', ')}) VALUES (${placeholders})`;
+        const [customerResult] = await db.execute(sql, values);
+        // Insert customer and get customer_id
+        //const [customerResult] = await db.execute(
+        //    'INSERT INTO customer (firstname, lastname, street, city, state, zipcode, email,phone,customer_image) VALUES (?, ?, ?)',
+         //   [customer_details.name, customer_details.email, customer_details.phone]
+        //);
+        const customer_id = customerResult.insertId;
+        
+        //Get room_type_id 
+       const [roomtypeRows] =  await db.execute(
+        'SELECT roomtype_id FROM room_type WHERE roomtypename= ?',
+        [room_type]
+    );
+    const roomtype_id = roomtypeRows[0].roomtype_id;
+
+        // Get room_id
+        const [roomRows] = await db.execute(
+            'SELECT room_id FROM rooms WHERE motel_id = ? AND room_type_id = ?',
+            [motel_id, room_type]
+        );
+        if (roomRows.length === 0) return res.status(400).json({ error: 'Room not available' });
+        const room_id = roomRows[0].room_id;
+        
+        // Calculate check_out date
+        //const check_out = new Date(check_in);
+        //check_out.setDate(check_out.getDate() + nights);
+        //const booking_status = "booked"
+        
+        // Insert booking
+        const [bookingResult] = await db.execute(
+            'INSERT INTO book_a_room (motel_id, customer_id, room_id, check_in, nights, check_out, rooms, adults) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [motel_id, customer_id, room_id, check_in, nights, check_out, rooms, adults]
+        );
+        
+        await db.query('UPDATE rooms SET current_booking_status = ? WHERE room_id = ?', ['booked', room_id]);
+
+        res.status(201).json({ booking_id: bookingResult.insertId, message: 'Booking successful' });
+
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        await db.end();
+    }
+});
