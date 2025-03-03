@@ -272,7 +272,7 @@ userRouter.put("/users/disable/:id", async (req, res) => {
   }
 });
 
-
+//UPdate user
 userRouter.put("/users/update/:id", async (req, res) => {
   const { id } = req.params;
   const { ...updateFields } = req.body;
@@ -290,7 +290,7 @@ userRouter.put("/users/update/:id", async (req, res) => {
   }
 
   try {
-    const query = `UPDATE user SET ${updates} WHERE id = ?`;
+    const query = `UPDATE user SET ${updates} WHERE user_id = ?`;
     const values = [...Object.values(updateFields).filter(value => value !== undefined), id];
 
     db.query(query, values, (err, result) => {
