@@ -258,7 +258,7 @@ userRouter.put("/users/disable/:id", async (req, res) => {
   }
 
   try {
-    const query = "UPDATE user SET enabled = 0 WHERE id = ?";
+    const query = "UPDATE user SET enabled = 0 WHERE user_id = ?";
     db.query(query, [id], (err, result) => {
       if (err) return res.status(500).send(err);
       if (result.affectedRows === 0) {
@@ -271,22 +271,6 @@ userRouter.put("/users/disable/:id", async (req, res) => {
     res.status(500).json({ message: "Error disabling user", error });
   }
 });
-
-  //  DELETE User by ID
-  userRouter.delete("/users/:id", (req, res) => {
-    const userId = req.params.id;
-    const query = "DELETE FROM user WHERE user_id = ?";
-  
-    db.query(query, [userId], (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: "Database error", details: err });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      res.json({ message: "User deleted successfully" });
-    });
-  });
 
   //Update User details
   userRouter.put("/users/:id", (req, res) => {
