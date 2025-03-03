@@ -155,68 +155,100 @@ userRouter.post("/reset-password", async (req, res) => {
 
 
 
-//Create User
-userRouter.post("/users", async (req, res) => {
-    const {
-      motel_name,
-      motel_id,
-      motel_location,
-      username,
-      password,
-      fullname,
-      email,
-      street,
-      city,
-      state,
-      zipcode,
-      country,
-      phone,
-      hiring_date,
-      role,
-      enabled,
-    } = req.body;
+// //Create User
+// userRouter.post("/users", async (req, res) => {
+//     const {
+//       motel_name,
+//       motel_id,
+//       motel_location,
+//       username,
+//       password,
+//       fullname,
+//       email,
+//       street,
+//       city,
+//       state,
+//       zipcode,
+//       country,
+//       phone,
+//       hiring_date,
+//       role,
+//       enabled,
+//     } = req.body;
 
   
-    if (!username || !password || !fullname || !hiring_date) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
+//     if (!username || !password || !fullname || !hiring_date) {
+//       return res.status(400).json({ message: "Missing required fields" });
+//     }
   
-    try {
-      const uid = generateUID()
-      db.query(
-        `INSERT INTO user 
-          (motel_name, motel_id, motel_location,uid, username, password, fullname, email, street, city, state, zipcode, country, phone, hiring_date, role, enabled) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)`,
-        [
-          motel_name,
-          motel_id,
-          motel_location,
-          uid,
-          username,
-          password,
-          fullname,
-          email,
-          street,
-          city,
-          state,
-          zipcode,
-          country,
-          phone,
-          hiring_date,
-          role,
-          enabled || 1,
-        ],
-        (err, result) => {
-          if (err) return res.status(500).send(err);
-          res.status(201).json({ message: "User created successfully" });
-        }
-      );
-    } catch (error) {
-      console.log(error)
-      res.status(500).json({ message: "Error creating user", error });
-    }
-  });
+//     try {
+//       const uid = generateUID()
+//       db.query(
+//         `INSERT INTO user 
+//           (motel_name, motel_id, motel_location,uid, username, password, fullname, email, street, city, state, zipcode, country, phone, hiring_date, role, enabled) 
+//           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)`,
+//         [
+//           motel_name,
+//           motel_id,
+//           motel_location,
+//           uid,
+//           username,
+//           password,
+//           fullname,
+//           email,
+//           street,
+//           city,
+//           state,
+//           zipcode,
+//           country,
+//           phone,
+//           hiring_date,
+//           role,
+//           enabled || 1,
+//         ],
+//         (err, result) => {
+//           if (err) return res.status(500).send(err);
+//           res.status(201).json({ message: "User created successfully" });
+//         }
+//       );
+//     } catch (error) {
+//       console.log(error)
+//       res.status(500).json({ message: "Error creating user", error });
+//     }
+//   });
   
+
+userRouter.post("/users", async (req, res) => {
+  const { motel_id, username, password, fullname, role, ...optionalFields } = req.body;
+
+  if (!motel_id || !username || !password || !fullname || !role) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    const uid = generateUID();
+    const columns = ["motel_id", "username", "password", "fullname", "role", "uid"];
+    const values = [motel_id, username, password, fullname, role, uid];
+    
+    Object.entries(optionalFields).forEach(([key, value]) => {
+      if (value !== undefined) {
+        columns.push(key);
+        values.push(value);
+      }
+    });
+    
+    const placeholders = columns.map(() => "?").join(", ");
+    const query = `INSERT INTO user (${columns.join(", ")}) VALUES (${placeholders})`;
+
+    db.query(query, values, (err, result) => {
+      if (err) return res.status(500).send(err);
+      res.status(201).json({ message: "User created successfully" });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error creating user", error });
+  }
+});
 
   //  DELETE User by ID
   userRouter.delete("/users/:id", (req, res) => {
