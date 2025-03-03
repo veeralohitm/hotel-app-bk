@@ -144,7 +144,7 @@ userRouter.post("/reset-password", async (req, res) => {
       // Get User History
       userRouter.get("/users/:id/history", (req, res) => {
         db.query(
-          "SELECT * FROM UserHistory WHERE user_id = ?",
+          "SELECT * FROM user_history WHERE user_id = ?",
           [req.params.id],
           (err, results) => {
             if (err) return res.status(500).send(err);
