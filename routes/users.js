@@ -272,33 +272,91 @@ userRouter.put("/users/disable/:id", async (req, res) => {
   }
 });
 
-  //Update User details
-  userRouter.put("/users/:id", (req, res) => {
-    const userId = req.params.id;
-    //console.log(userId)
-    const { username, password, role } = req.body;
-    const sql = "UPDATE user SET username = ?, password = ?, role = ? WHERE user_id = ?";
-  
-    db.query(sql, [username, password, role, userId], (err, result) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ message: "User updated successfully!" });
-    });
-  });
 
-// Enable/Disable User
-userRouter.put("/user/:id/status", (req, res) => {
-    const { enabled } = req.body;
-    db.query(
-      "UPDATE user SET enabled = ? WHERE user_id = ?",
-      [enabled, req.params.id],
-      (err, result) => {
-        if (err) return res.status(500).send(err);
-        res.json({ message: "User status updated" });
+userRouter.put("/users/update/:id", async (req, res) => {
+  const { id } = req.params;
+  const { ...updateFields } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ message: "User ID is required" });
+  }
+  
+  const updates = Object.entries(updateFields)
+    .filter(([_, value]) => value !== undefined)
+    .map(([key, _]) => `${key} = ?`).join(", ");
+  
+  if (!updates) {
+    return res.status(400).json({ message: "No valid fields to update" });
+  }
+
+  try {
+    const query = `UPDATE user SET ${updates} WHERE id = ?`;
+    const values = [...Object.values(updateFields).filter(value => value !== undefined), id];
+
+    db.query(query, values, (err, result) => {
+      if (err) return res.status(500).send(err);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: "User not found" });
       }
-    );
-  });
+      res.status(200).json({ message: "User updated successfully" });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error updating user", error });
+  }
+});
+
+// Enable user 
+userRouter.put("/users/enable/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: "User ID is required" });
+  }
+
+  try {
+    const query = "UPDATE user SET enabled = 1 WHERE user_id = ?";
+    db.query(query, [id], (err, result) => {
+      if (err) return res.status(500).send(err);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.status(200).json({ message: "User enabled successfully" });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error enabling user", error });
+  }
+});
+
+
+  // //Update User details
+  // userRouter.put("/users/:id", (req, res) => {
+  //   const userId = req.params.id;
+  //   //console.log(userId)
+  //   const { username, password, role } = req.body;
+  //   const sql = "UPDATE user SET username = ?, password = ?, role = ? WHERE user_id = ?";
+  
+  //   db.query(sql, [username, password, role, userId], (err, result) => {
+  //     if (err) {
+  //       res.status(500).json({ error: err.message });
+  //       return;
+  //     }
+  //     res.json({ message: "User updated successfully!" });
+  //   });
+  // });
+
+// // Enable/Disable User
+// userRouter.put("/user/:id/status", (req, res) => {
+//     const { enabled } = req.body;
+//     db.query(
+//       "UPDATE user SET enabled = ? WHERE user_id = ?",
+//       [enabled, req.params.id],
+//       (err, result) => {
+//         if (err) return res.status(500).send(err);
+//         res.json({ message: "User status updated" });
+//       }
+//     );
+//   });
 
 module.exports = userRouter;
