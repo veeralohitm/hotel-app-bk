@@ -217,18 +217,17 @@ userRouter.post("/reset-password", async (req, res) => {
 //     }
 //   });
   
+userRouter.post("/createuser", async (req, res) => {
+  const { motel_id, username, password, fullname, role, hiring_date, ...optionalFields } = req.body;
 
-userRouter.post("/users", async (req, res) => {
-  const { motel_id, username, password, fullname, role, ...optionalFields } = req.body;
-
-  if (!motel_id || !username || !password || !fullname || !role) {
+  if (!motel_id || !username || !password || !fullname || !role || !hiring_date) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
   try {
     const uid = generateUID();
-    const columns = ["motel_id", "username", "password", "fullname", "role", "uid"];
-    const values = [motel_id, username, password, fullname, role, uid];
+    const columns = ["motel_id", "username", "password", "fullname", "role", "hiring_date", "uid", "enabled"];
+    const values = [motel_id, username, password, fullname, role, hiring_date, uid, 1];
     
     Object.entries(optionalFields).forEach(([key, value]) => {
       if (value !== undefined) {
