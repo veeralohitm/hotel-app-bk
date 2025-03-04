@@ -181,7 +181,7 @@ motelRouter.get('/motels/:id/rooms', async (req, res) => {
   try {
       // Fetch motel information
       const [motelInfo] = await connection.query(
-          'SELECT * FROM motel WHERE motel_id = ?',
+          'SELECT * FROM motel_details WHERE motel_id = ?',
           [id]
       );
 
