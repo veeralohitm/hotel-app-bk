@@ -4,87 +4,6 @@ const motelRouter = express.Router();
 const db2 = require('../config/db_pool');
 
 
-// POST: Create a new motel and generate roomsgene
-motelRouter.post('/motels', async (req, res) => {
-    const { Name, Location, roomSets, max_rooms } = req.body;
-    //console.log(Name, Location, roomSets, max_rooms);
-  
-    // Validate the form data
-    if (!Name || !Location || !roomSets || !Array.isArray(roomSets) || roomSets.length === 0) {
-      return res.status(400).json({ error: 'Invalid input. Name, Location, and Rooms are required.' });
-    }
-  
-   // if (max_rooms && max_rooms > 30) {
-    //  return res.status(400).json({ error: 'You cannot create more than 30 rooms' });
-   // }
-  
-    // Calculate total number of rooms from all roomSets
-    //const totalRooms = roomSets.reduce((total, roomSet) => total + parseInt(roomSet.numRooms), 0);
-  
-    //if (totalRooms > (max_rooms || 30)) {
-    //  return res.status(400).json({ error: 'You cannot create more than 30 rooms' });
-    //}
-  
-    // Start a transaction
-    const connection = await db.promise().getConnection();
-    try {
-      await connection.beginTransaction();
-  
-      // Step 1: Insert the motel into the motel_details table
-      const [motelResult] = await connection.query(
-        'INSERT INTO motel_details (motel_name, motel_location,motel_max_rooms) VALUES (?, ?,?)',
-        [Name, Location,max_rooms]
-      );
-      const MotelID = motelResult.insertId;
-  
-      // Step 2: Process each room set and insert rooms into the room table
-      for (const room of roomSets) {
-        const { roomType, numRooms, startNumber } = room;
-  
-        if (!roomType || !numRooms || !startNumber) {
-          throw new Error('Invalid room data provided.');
-        }
-  
-        // Get the room_type_id from the room_type table based on the roomType
-        const [roomTypeResult] = await connection.query(
-          'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
-          [roomType]
-        );
-  
-        if (roomTypeResult.length === 0) {
-          throw new Error(`Room type "${roomType}" not found.`);
-        }
-  
-        const roomTypeID = roomTypeResult[0].roomtype_id;
-  
-        // Determine the number of rooms based on the number of rooms provided and the range of numbers
-        const startRoomNumber = parseInt(startNumber); // Assuming startNumber is like "101"
-        const roomSuffix = startNumber.slice(-2); // Get "-A" or "-B" suffix
-  
-        // Insert rooms in a loop
-        for (let i = 0; i < numRooms; i++) {
-          const roomNumber = `${startRoomNumber + i}${roomSuffix}`;
-  
-          await connection.query(
-            'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
-            [MotelID, roomTypeID, roomNumber]
-          );
-        }
-      }
-  
-      // Commit the transaction
-      await connection.commit();
-      res.json({ message: 'Motel and rooms created successfully', MotelID });
-    } catch (err) {
-      // Roll back in case of an error
-      await connection.rollback();
-      console.error('Error creating motel and rooms:', err.message);
-      res.status(500).json({ error: 'Failed to create motel and rooms', details: err.message });
-    } finally {
-      connection.release();
-    }
-  });
-
   //Create Motel 
   motelRouter.post('/createmotel', async (req, res) => {
     const { Name, Location, max_rooms, rooms } = req.body;
@@ -145,8 +64,6 @@ motelRouter.post('/motels', async (req, res) => {
     }
 });
 
-
-
 //// Add Rooms to Existing Motel
 motelRouter.post('/motels/:id/rooms', async (req, res) => {
   const { id } = req.params;
@@ -193,8 +110,6 @@ motelRouter.post('/motels/:id/rooms', async (req, res) => {
       connection.release();
   }
 });
-
-
 
 // Edit Room Details for an Existing Motel
 motelRouter.put('/motels/:motelId/rooms/:roomId', async (req, res) => {
@@ -258,8 +173,42 @@ motelRouter.put('/motels/:motelId/rooms/:roomId', async (req, res) => {
   }
 });
 
+// Get Motel Information with All Rooms
+motelRouter.get('/motels/:id/rooms', async (req, res) => {
+  const { id } = req.params;
 
+  const connection = await db2.getConnection();
+  try {
+      // Fetch motel information
+      const [motelInfo] = await connection.query(
+          'SELECT * FROM motel WHERE motel_id = ?',
+          [id]
+      );
 
+      if (motelInfo.length === 0) {
+          return res.status(404).json({ error: 'Motel not found' });
+      }
+
+      // Fetch all rooms associated with the motel
+      const [rooms] = await connection.query(
+          'SELECT r.room_id, r.roomnumber, rt.roomtypename FROM room r JOIN room_type rt ON r.roomtype_id = rt.roomtype_id WHERE r.motel_id = ?',
+          [id]
+      );
+
+      // Combine motel information and room details
+      const motelDetails = {
+          motel: motelInfo[0],
+          rooms: rooms
+      };
+
+      res.json(motelDetails);
+  } catch (err) {
+      console.error('Error fetching motel and rooms:', err.message);
+      res.status(500).json({ error: 'Failed to retrieve motel information', details: err.message });
+  } finally {
+      connection.release();
+  }
+});
 
 
 //get motels along with room details grouped by room type
@@ -289,7 +238,6 @@ motelRouter.get("/motels", (req, res) => {
                 motel.room_types.push({
                     roomtypename: row.roomtypename,
                     room_count: row.room_count,
-                    start_room_number: row.start_room_number
                 });
             } else {
                 acc.push({
@@ -300,7 +248,6 @@ motelRouter.get("/motels", (req, res) => {
                     room_types: [{
                         roomtypename: row.roomtypename,
                         room_count: row.room_count,
-                        start_room_number: row.start_room_number
                     }]
                 });
             }
@@ -311,39 +258,5 @@ motelRouter.get("/motels", (req, res) => {
     });
 });
 
-//Delete Motel  
-motelRouter.delete("/motels/:id", async (req, res) => {
-    const { id } = req.params;
-  
-    if (!id) {
-      return res.status(400).json({ error: "Motel ID is required." });
-    }
-  
-    const connection = await db.promise().getConnection();
-    try {
-      await connection.beginTransaction();
-  
-      // Check if the motel exists
-      const [motel] = await connection.query("SELECT * FROM motel_details WHERE motel_id = ?", [id]);
-      if (motel.length === 0) {
-        throw new Error("Motel not found.");
-      }
-  
-      // Delete associated rooms
-      await connection.query("DELETE FROM room WHERE motel_id = ?", [id]);
-  
-      // Delete the motel
-      await connection.query("DELETE FROM motel_details WHERE motel_id = ?", [id]);
-  
-      await connection.commit();
-      res.json({ message: "Motel and associated rooms deleted successfully." });
-  
-    } catch (error) {
-      await connection.rollback();
-      console.error("Error deleting motel:", error.message);
-      res.status(500).json({ error: "Failed to delete motel.", details: error.message });
-    } finally {
-      connection.release();
-    }
-  });
+
 module.exports = motelRouter;
