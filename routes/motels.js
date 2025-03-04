@@ -208,6 +208,54 @@ motelRouter.put('/editmotel/:id', async (req, res) => {
   }
 });
 
+
+//// Add Rooms to Existing Motel
+motelRouter.post('/motels/:id/rooms', async (req, res) => {
+  const { id } = req.params;
+  const { rooms } = req.body;
+
+  if (!rooms || !Array.isArray(rooms) || rooms.length === 0) {
+      return res.status(400).json({ error: 'Invalid input. Rooms data is required.' });
+  }
+
+  const connection = await db2.getConnection();
+  try {
+      await connection.beginTransaction();
+
+      for (const room of rooms) {
+          const { roomNumber, roomType } = room;
+          if (!roomNumber || !roomType) {
+              throw new Error('Invalid room data provided. Room Number and Room Type are required.');
+          }
+
+          const [roomTypeResult] = await connection.query(
+              'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
+              [roomType]
+          );
+
+          if (roomTypeResult.length === 0) {
+              throw new Error(`Room type "${roomType}" not found.`);
+          }
+
+          const roomTypeID = roomTypeResult[0].roomtype_id;
+
+          await connection.query(
+              'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
+              [id, roomTypeID, roomNumber]
+          );
+      }
+
+      await connection.commit();
+      res.json({ message: 'Rooms added successfully' });
+  } catch (err) {
+      await connection.rollback();
+      console.error('Error adding rooms:', err.message);
+      res.status(500).json({ error: 'Failed to add rooms', details: err.message });
+  } finally {
+      connection.release();
+  }
+});
+
 //Edit Motel 
 motelRouter.put("/motels/:id", async (req, res) => {
     const { id } = req.params;
