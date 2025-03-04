@@ -145,68 +145,6 @@ motelRouter.post('/motels', async (req, res) => {
     }
 });
 
-//Edit Motel
-motelRouter.put('/editmotel/:id', async (req, res) => {
-  const { id } = req.params;
-  const { Name, Location, rooms } = req.body;
-
-  if (!Name && !Location && (!rooms || !Array.isArray(rooms))) {
-      return res.status(400).json({ error: 'At least one field (Name, Location, or Rooms) is required for update.' });
-  }
-
-  const connection = await db2.getConnection();
-  try {
-      await connection.beginTransaction();
-
-      // Update motel details only if provided
-      if (Name || Location) {
-          await connection.query(
-              'UPDATE motel_details SET motel_name = COALESCE(?, motel_name), motel_location = COALESCE(?, motel_location) WHERE motel_id = ?',
-              [Name, Location, id]
-          );
-      }
-
-      // Update rooms if provided
-      if (rooms && rooms.length > 0) {
-          // Delete existing rooms for the motel
-          await connection.query('DELETE FROM room WHERE motel_id = ?', [id]);
-
-          // Insert updated room details
-          for (const room of rooms) {
-              const { roomNumber, roomType } = room;
-
-              if (!roomNumber || !roomType) {
-                  throw new Error('Invalid room data provided. Room Number and Room Type are required.');
-              }
-
-              const [roomTypeResult] = await connection.query(
-                  'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
-                  [roomType]
-              );
-
-              if (roomTypeResult.length === 0) {
-                  throw new Error(`Room type "${roomType}" not found.`);
-              }
-
-              const roomTypeID = roomTypeResult[0].roomtype_id;
-
-              await connection.query(
-                  'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
-                  [id, roomTypeID, roomNumber]
-              );
-          }
-      }
-
-      await connection.commit();
-      res.json({ message: 'Motel updated successfully' });
-  } catch (err) {
-      await connection.rollback();
-      console.error('Error updating motel:', err.message);
-      res.status(500).json({ error: 'Failed to update motel', details: err.message });
-  } finally {
-      connection.release();
-  }
-});
 
 
 //// Add Rooms to Existing Motel
@@ -256,64 +194,73 @@ motelRouter.post('/motels/:id/rooms', async (req, res) => {
   }
 });
 
-//Edit Motel 
-motelRouter.put("/motels/:id", async (req, res) => {
-    const { id } = req.params;
-    const { roomSets } = req.body;
-  
-    //console.log(id,roomSets)
-    if (!roomSets || !Array.isArray(roomSets)) {
-      return res.status(400).json({ error: "Invalid room data." });
-    }
-  
-    const connection = await db.promise().getConnection();
-    try {
-      await connection.beginTransaction();
-  
-      // Get existing motel details
-      const [motel] = await connection.query("SELECT * FROM motel_details WHERE motel_id = ?", [id]);
-      if (motel.length === 0) {
-        throw new Error("Motel not found.");
-      }
-      const maxRooms = motel[0].motel_max_rooms;
-      //console.log(maxRooms)
 
-      const totalRooms = roomSets.reduce((sum, room) => sum + parseInt(room.room_count || 0), 0);
-      if (totalRooms > maxRooms) {
-        throw new Error(`Total rooms cannot exceed ${maxRooms}.`);
+
+// Edit Room Details for an Existing Motel
+motelRouter.put('/motels/:motelId/rooms/:roomId', async (req, res) => {
+  const { motelId, roomId } = req.params;
+  const { roomNumber, roomType } = req.body;
+
+  if (!roomNumber && !roomType) {
+      return res.status(400).json({ error: 'Invalid input. At least one of roomNumber or roomType is required.' });
+  }
+
+  const connection = await db2.getConnection();
+  try {
+      await connection.beginTransaction();
+
+      // Check if room exists
+      const [roomExists] = await connection.query(
+          'SELECT * FROM room WHERE room_id = ? AND motel_id = ?',
+          [roomId, motelId]
+      );
+
+      if (roomExists.length === 0) {
+          throw new Error('Room not found for the given motel.');
       }
-  
-      // Delete existing rooms for the motel
-      await connection.query("DELETE FROM room WHERE motel_id = ?", [id]);
-  
-      // Insert updated rooms
-      for (const room of roomSets) {
-        const [roomType] = await connection.query("SELECT roomtype_id FROM room_type WHERE roomtypename = ?", [room.roomtypename]);
-        //console.log(roomType)
-        if (roomType.length === 0) {
-          throw new Error(`Invalid room type: ${room.roomType}`);
-        }
-  
-        const startNumber = parseInt(room.start_room_number.split("-")[0]); // Extract number part from "101-A"
-        for (let i = 0; i < room.room_count; i++) {
-          const roomNumber = `${startNumber + i}-${room.start_room_number.split("-")[1]}`; // Maintain -A or -B
-          await connection.query(
-            "INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)",
-            [id, roomType[0].roomtype_id, roomNumber]
+
+      // If roomType is provided, validate and get the room type ID
+      if (roomType) {
+          const [roomTypeResult] = await connection.query(
+              'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
+              [roomType]
           );
-        }
+
+          if (roomTypeResult.length === 0) {
+              throw new Error(`Room type "${roomType}" not found.`);
+          }
+
+          const roomTypeID = roomTypeResult[0].roomtype_id;
+
+          // Update the room with new room type ID
+          await connection.query(
+              'UPDATE room SET roomtype_id = ? WHERE room_id = ? AND motel_id = ?',
+              [roomTypeID, roomId, motelId]
+          );
       }
-  
+
+      // If roomNumber is provided, update the room number
+      if (roomNumber) {
+          await connection.query(
+              'UPDATE room SET roomnumber = ? WHERE room_id = ? AND motel_id = ?',
+              [roomNumber, roomId, motelId]
+          );
+      }
+
       await connection.commit();
-      res.json({ message: "Motel rooms updated successfully." });
-  
-    } catch (error) {
+      res.json({ message: 'Room details updated successfully' });
+  } catch (err) {
       await connection.rollback();
-      res.status(500).json({ error: error.message });
-    } finally {
+      console.error('Error updating room:', err.message);
+      res.status(500).json({ error: 'Failed to update room', details: err.message });
+  } finally {
       connection.release();
-    }
-  }); 
+  }
+});
+
+
+
+
 
 //get motels along with room details grouped by room type
 motelRouter.get("/motels", (req, res) => {
