@@ -145,7 +145,68 @@ motelRouter.post('/motels', async (req, res) => {
     }
 });
 
-  
+//Edit Motel
+motelRouter.put('/editmotel/:id', async (req, res) => {
+  const { id } = req.params;
+  const { Name, Location, rooms } = req.body;
+
+  if (!Name && !Location && (!rooms || !Array.isArray(rooms))) {
+      return res.status(400).json({ error: 'At least one field (Name, Location, or Rooms) is required for update.' });
+  }
+
+  const connection = await db2.getConnection();
+  try {
+      await connection.beginTransaction();
+
+      // Update motel details only if provided
+      if (Name || Location) {
+          await connection.query(
+              'UPDATE motel_details SET motel_name = COALESCE(?, motel_name), motel_location = COALESCE(?, motel_location) WHERE motel_id = ?',
+              [Name, Location, id]
+          );
+      }
+
+      // Update rooms if provided
+      if (rooms && rooms.length > 0) {
+          // Delete existing rooms for the motel
+          await connection.query('DELETE FROM room WHERE motel_id = ?', [id]);
+
+          // Insert updated room details
+          for (const room of rooms) {
+              const { roomNumber, roomType } = room;
+
+              if (!roomNumber || !roomType) {
+                  throw new Error('Invalid room data provided. Room Number and Room Type are required.');
+              }
+
+              const [roomTypeResult] = await connection.query(
+                  'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
+                  [roomType]
+              );
+
+              if (roomTypeResult.length === 0) {
+                  throw new Error(`Room type "${roomType}" not found.`);
+              }
+
+              const roomTypeID = roomTypeResult[0].roomtype_id;
+
+              await connection.query(
+                  'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
+                  [id, roomTypeID, roomNumber]
+              );
+          }
+      }
+
+      await connection.commit();
+      res.json({ message: 'Motel updated successfully' });
+  } catch (err) {
+      await connection.rollback();
+      console.error('Error updating motel:', err.message);
+      res.status(500).json({ error: 'Failed to update motel', details: err.message });
+  } finally {
+      connection.release();
+  }
+});
 
 //Edit Motel 
 motelRouter.put("/motels/:id", async (req, res) => {
