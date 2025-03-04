@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../config/db');
 const motelRouter = express.Router();
+const db2 = require('../config/db_pool');
 
 
 // POST: Create a new motel and generate roomsgene
@@ -93,7 +94,7 @@ motelRouter.post('/motels', async (req, res) => {
         return res.status(400).json({ error: 'Invalid input. Name, Location, and Rooms are required.' });
     }
 
-    const connection = await db.promise().getConnection();
+    const connection = await db2.getConnection();
     try {
         await connection.beginTransaction();
 
