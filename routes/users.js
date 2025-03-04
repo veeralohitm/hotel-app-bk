@@ -154,68 +154,6 @@ userRouter.post("/reset-password", async (req, res) => {
       });
 
 
-
-// //Create User
-// userRouter.post("/users", async (req, res) => {
-//     const {
-//       motel_name,
-//       motel_id,
-//       motel_location,
-//       username,
-//       password,
-//       fullname,
-//       email,
-//       street,
-//       city,
-//       state,
-//       zipcode,
-//       country,
-//       phone,
-//       hiring_date,
-//       role,
-//       enabled,
-//     } = req.body;
-
-  
-//     if (!username || !password || !fullname || !hiring_date) {
-//       return res.status(400).json({ message: "Missing required fields" });
-//     }
-  
-//     try {
-//       const uid = generateUID()
-//       db.query(
-//         `INSERT INTO user 
-//           (motel_name, motel_id, motel_location,uid, username, password, fullname, email, street, city, state, zipcode, country, phone, hiring_date, role, enabled) 
-//           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)`,
-//         [
-//           motel_name,
-//           motel_id,
-//           motel_location,
-//           uid,
-//           username,
-//           password,
-//           fullname,
-//           email,
-//           street,
-//           city,
-//           state,
-//           zipcode,
-//           country,
-//           phone,
-//           hiring_date,
-//           role,
-//           enabled || 1,
-//         ],
-//         (err, result) => {
-//           if (err) return res.status(500).send(err);
-//           res.status(201).json({ message: "User created successfully" });
-//         }
-//       );
-//     } catch (error) {
-//       console.log(error)
-//       res.status(500).json({ message: "Error creating user", error });
-//     }
-//   });
   
 userRouter.post("/createuser", async (req, res) => {
   const { motel_id, username, password, fullname, role, hiring_date, ...optionalFields } = req.body;
@@ -272,7 +210,7 @@ userRouter.put("/users/disable/:id", async (req, res) => {
   }
 });
 
-//UPdate user
+//Update user
 userRouter.put("/users/update/:id", async (req, res) => {
   const { id } = req.params;
   const { ...updateFields } = req.body;
@@ -328,35 +266,5 @@ userRouter.put("/users/enable/:id", async (req, res) => {
     res.status(500).json({ message: "Error enabling user", error });
   }
 });
-
-
-  // //Update User details
-  // userRouter.put("/users/:id", (req, res) => {
-  //   const userId = req.params.id;
-  //   //console.log(userId)
-  //   const { username, password, role } = req.body;
-  //   const sql = "UPDATE user SET username = ?, password = ?, role = ? WHERE user_id = ?";
-  
-  //   db.query(sql, [username, password, role, userId], (err, result) => {
-  //     if (err) {
-  //       res.status(500).json({ error: err.message });
-  //       return;
-  //     }
-  //     res.json({ message: "User updated successfully!" });
-  //   });
-  // });
-
-// // Enable/Disable User
-// userRouter.put("/user/:id/status", (req, res) => {
-//     const { enabled } = req.body;
-//     db.query(
-//       "UPDATE user SET enabled = ? WHERE user_id = ?",
-//       [enabled, req.params.id],
-//       (err, result) => {
-//         if (err) return res.status(500).send(err);
-//         res.json({ message: "User status updated" });
-//       }
-//     );
-//   });
 
 module.exports = userRouter;

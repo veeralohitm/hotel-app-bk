@@ -83,6 +83,67 @@ motelRouter.post('/motels', async (req, res) => {
       connection.release();
     }
   });
+
+  //Create Motel 
+  motelRouter.post('/createmotel', async (req, res) => {
+    const { Name, Location, max_rooms, rooms } = req.body;
+    
+    // Validate the form data
+    if (!Name || !Location || !rooms || !Array.isArray(rooms) || rooms.length === 0) {
+        return res.status(400).json({ error: 'Invalid input. Name, Location, and Rooms are required.' });
+    }
+
+    const connection = await db.promise().getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Insert the motel into the motel_details table
+        const [motelResult] = await connection.query(
+            'INSERT INTO motel_details (motel_name, motel_location, motel_max_rooms) VALUES (?, ?, ?)',
+            [Name, Location, max_rooms]
+        );
+        const MotelID = motelResult.insertId;
+
+        // Process each room and insert into the room table
+        for (const room of rooms) {
+            const { roomNumber, roomType } = room;
+            
+            if (!roomNumber || !roomType) {
+                throw new Error('Invalid room data provided. Room Number and Room Type are required.');
+            }
+
+            // Get the room_type_id from the room_type table based on the roomType
+            const [roomTypeResult] = await connection.query(
+                'SELECT roomtype_id FROM room_type WHERE roomtypename = ?',
+                [roomType]
+            );
+
+            if (roomTypeResult.length === 0) {
+                throw new Error(`Room type "${roomType}" not found.`);
+            }
+
+            const roomTypeID = roomTypeResult[0].roomtype_id;
+
+            // Insert room into the room table
+            await connection.query(
+                'INSERT INTO room (motel_id, roomtype_id, roomnumber) VALUES (?, ?, ?)',
+                [MotelID, roomTypeID, roomNumber]
+            );
+        }
+
+        // Commit the transaction
+        await connection.commit();
+        res.json({ message: 'Motel and rooms created successfully', MotelID });
+    } catch (err) {
+        // Rollback in case of an error
+        await connection.rollback();
+        console.error('Error creating motel and rooms:', err.message);
+        res.status(500).json({ error: 'Failed to create motel and rooms', details: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
   
 
 //Edit Motel 
