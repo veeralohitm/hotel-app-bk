@@ -329,4 +329,38 @@ userRouter.put("/users/enable/:id", async (req, res) => {
   }
 });
 
+
+// API to get user roles
+userRouter.get("/roles", async (req, res) => {
+  try {
+    const query = "SELECT role_id, role_name FROM User_Roles";
+    db.query(query, (err, result) => {
+      if (err) return res.status(500).json({ message: "Error fetching roles", error: err });
+      res.status(200).json(result);
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error retrieving roles", error });
+  }
+});
+
+// API to get user, property, and role relation
+userRouter.get("/user-property-relations", async (req, res) => {
+  try {
+    const query = `
+      SELECT u.user_id, u.username, u.fullname, ur.role, upr.property_id
+      FROM User_Property_Relations upr
+      JOIN user u ON upr.user_id = u.user_id
+      JOIN User_Roles ur ON upr.role_id = ur.role_id
+    `;
+    db.query(query, (err, result) => {
+      if (err) return res.status(500).json({ message: "Error fetching user-property-role relations", error: err });
+      res.status(200).json(result);
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error retrieving user-property-role relations", error });
+  }
+});
+
 module.exports = userRouter;
