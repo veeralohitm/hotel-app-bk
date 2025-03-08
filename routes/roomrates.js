@@ -64,7 +64,7 @@ roomratesRouter.put('/edit-room-rate/:id', (req, res) => {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
-    const updateQuery = 'UPDATE room_rates SET weekday_rate = ?, weekend_rate = ?, weekly_rate = ? WHERE id = ?';
+    const updateQuery = 'UPDATE room_rates SET weekday_rate = ?, weekend_rate = ?, weekly_rate = ? WHERE rate_id = ?';
     db.query(updateQuery, [weekday_rate, weekend_rate, weekly_rate, id], (err, result) => {
         if (err) {
             return res.status(500).json({ message: 'Database error', error: err });

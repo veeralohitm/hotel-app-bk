@@ -155,6 +155,41 @@ userRouter.post("/reset-password", async (req, res) => {
 
 
   
+// userRouter.post("/createuser", async (req, res) => {
+//   const { motel_id, username, password, fullname, role, hiring_date, ...optionalFields } = req.body;
+
+//   if (!motel_id || !username || !password || !fullname || !role || !hiring_date) {
+//     return res.status(400).json({ message: "Missing required fields" });
+//   }
+
+//   try {
+//     const uid = generateUID();
+//     const columns = ["motel_id", "username", "password", "fullname", "role", "hiring_date", "uid", "enabled"];
+//     const values = [motel_id, username, password, fullname, role, hiring_date, uid, 1];
+    
+//     Object.entries(optionalFields).forEach(([key, value]) => {
+//       if (value !== undefined) {
+//         columns.push(key);
+//         values.push(value);
+//       }
+//     });
+    
+//     const placeholders = columns.map(() => "?").join(", ");
+//     const query = `INSERT INTO user (${columns.join(", ")}) VALUES (${placeholders})`;
+
+//     db.query(query, values, (err, result) => {
+//       if (err) return res.status(500).send(err);
+//       res.status(201).json({ message: "User created successfully" });
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Error creating user", error });
+//   }
+// });
+
+
+//Create User 
+
 userRouter.post("/createuser", async (req, res) => {
   const { motel_id, username, password, fullname, role, hiring_date, ...optionalFields } = req.body;
 
@@ -163,23 +198,34 @@ userRouter.post("/createuser", async (req, res) => {
   }
 
   try {
-    const uid = generateUID();
-    const columns = ["motel_id", "username", "password", "fullname", "role", "hiring_date", "uid", "enabled"];
-    const values = [motel_id, username, password, fullname, role, hiring_date, uid, 1];
-    
-    Object.entries(optionalFields).forEach(([key, value]) => {
-      if (value !== undefined) {
-        columns.push(key);
-        values.push(value);
+    // Fetch role_id from User_Roles table
+    const roleQuery = "SELECT role_id FROM User_Roles WHERE role = ?";
+    db.query(roleQuery, [role], (roleErr, roleResult) => {
+      if (roleErr) return res.status(500).json({ message: "Error fetching role ID", error: roleErr });
+      
+      if (roleResult.length === 0) {
+        return res.status(400).json({ message: "Invalid role specified" });
       }
-    });
-    
-    const placeholders = columns.map(() => "?").join(", ");
-    const query = `INSERT INTO user (${columns.join(", ")}) VALUES (${placeholders})`;
 
-    db.query(query, values, (err, result) => {
-      if (err) return res.status(500).send(err);
-      res.status(201).json({ message: "User created successfully" });
+      const role_id = roleResult[0].role_id;
+      const uid = generateUID();
+      const columns = ["motel_id", "username", "password", "fullname", "role_id", "hiring_date", "uid", "enabled"];
+      const values = [motel_id, username, password, fullname, role_id, hiring_date, uid, 1];
+      
+      Object.entries(optionalFields).forEach(([key, value]) => {
+        if (value !== undefined) {
+          columns.push(key);
+          values.push(value);
+        }
+      });
+      
+      const placeholders = columns.map(() => "?").join(", ");
+      const query = `INSERT INTO user (${columns.join(", ")}) VALUES (${placeholders})`;
+
+      db.query(query, values, (err, result) => {
+        if (err) return res.status(500).json({ message: "Error inserting user", error: err });
+        res.status(201).json({ message: "User created successfully" });
+      });
     });
   } catch (error) {
     console.error(error);
