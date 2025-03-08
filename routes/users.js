@@ -348,7 +348,7 @@ userRouter.get("/roles", async (req, res) => {
 userRouter.get("/user-property-relations", async (req, res) => {
   try {
     const query = `
-      SELECT u.user_id, u.username, u.fullname, ur.role, upr.property_id
+      SELECT u.user_id, u.username, u.fullname, ur.role_name, upr.property_id
       FROM User_Property_Relations upr
       JOIN user u ON upr.user_id = u.user_id
       JOIN User_Roles ur ON upr.role_id = ur.role_id
