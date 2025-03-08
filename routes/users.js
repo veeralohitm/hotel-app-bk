@@ -210,7 +210,7 @@ userRouter.post("/createuser", async (req, res) => {
       const role_id = roleResult[0].role_id;
       const uid = generateUID();
       const columns = ["username", "password", "fullname", "role_id", "hiring_date", "uid", "enabled"];
-      const values = [motel_id, username, password, fullname, role_id, hiring_date, uid, 1];
+      const values = [username, password, fullname, role_id, hiring_date, uid, 1];
       
       Object.entries(optionalFields).forEach(([key, value]) => {
         if (value !== undefined) {
