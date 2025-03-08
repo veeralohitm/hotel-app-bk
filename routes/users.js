@@ -199,7 +199,7 @@ userRouter.post("/createuser", async (req, res) => {
 
   try {
     // Fetch role_id from User_Roles table
-    const roleQuery = "SELECT role_id FROM User_Roles WHERE role = ?";
+    const roleQuery = "SELECT role_id FROM User_Roles WHERE role_name = ?";
     db.query(roleQuery, [role], (roleErr, roleResult) => {
       if (roleErr) return res.status(500).json({ message: "Error fetching role ID", error: roleErr });
       
