@@ -191,9 +191,9 @@ userRouter.post("/reset-password", async (req, res) => {
 //Create User 
 
 userRouter.post("/createuser", async (req, res) => {
-  const { motel_id, username, password, fullname, role, hiring_date, ...optionalFields } = req.body;
+  const { username, password, fullname, role, hiring_date, property_id, ...optionalFields } = req.body;
 
-  if (!motel_id || !username || !password || !fullname || !role || !hiring_date) {
+  if ( !username || !password || !fullname || !role || !hiring_date || !property_id) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
@@ -209,7 +209,7 @@ userRouter.post("/createuser", async (req, res) => {
 
       const role_id = roleResult[0].role_id;
       const uid = generateUID();
-      const columns = ["motel_id", "username", "password", "fullname", "role_id", "hiring_date", "uid", "enabled"];
+      const columns = ["username", "password", "fullname", "role_id", "hiring_date", "uid", "enabled"];
       const values = [motel_id, username, password, fullname, role_id, hiring_date, uid, 1];
       
       Object.entries(optionalFields).forEach(([key, value]) => {
@@ -224,7 +224,13 @@ userRouter.post("/createuser", async (req, res) => {
 
       db.query(query, values, (err, result) => {
         if (err) return res.status(500).json({ message: "Error inserting user", error: err });
-        res.status(201).json({ message: "User created successfully" });
+        
+        const user_id = result.insertId;
+        const userPropertyQuery = "INSERT INTO User_Property_Relations (user_id, role_id, property_id) VALUES (?, ?, ?)";
+        db.query(userPropertyQuery, [user_id, role_id, property_id], (relErr) => {
+          if (relErr) return res.status(500).json({ message: "Error updating User_Property_Relations", error: relErr });
+          res.status(201).json({ message: "User created successfully and relation updated" });
+        });
       });
     });
   } catch (error) {
@@ -232,6 +238,7 @@ userRouter.post("/createuser", async (req, res) => {
     res.status(500).json({ message: "Error creating user", error });
   }
 });
+
 
 // Disable user 
 userRouter.put("/users/disable/:id", async (req, res) => {
