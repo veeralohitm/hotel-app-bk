@@ -198,6 +198,14 @@ userRouter.post("/createuser", async (req, res) => {
   }
 
   try {
+
+    const checkUserQuery = "SELECT user_id FROM user WHERE username = ?";
+    db.query(checkUserQuery, [username], (checkErr, checkResult) => {
+      if (checkErr) return res.status(500).json({ message: "Error checking existing user", error: checkErr });
+      
+      if (checkResult.length > 0) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
     // Fetch role_id from User_Roles table
     const roleQuery = "SELECT role_id FROM User_Roles WHERE role_name = ?";
     db.query(roleQuery, [role], (roleErr, roleResult) => {
@@ -232,6 +240,7 @@ userRouter.post("/createuser", async (req, res) => {
           res.status(201).json({ message: "User created successfully and relation updated" });
         });
       });
+    });
     });
   } catch (error) {
     console.error(error);
